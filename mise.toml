@@ -1,0 +1,4 @@
+[tools]
+bun = "1.4.4"
+# sqld: o servidor do libSQL, usado nos testes do driver HTTP (o mesmo protocolo do Turso Cloud).
+libsql-server = { version = "0.24.32", version_prefix = "libsql-server-v" }

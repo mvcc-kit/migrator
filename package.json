@@ -1,0 +1,38 @@
+{
+  "name": "migrator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Aplica migrations SQL versionadas com checksum, hash encadeado, trava, identidade do ambiente, detecção de drift e lint de comandos destrutivos. Layout, dialeto e driver são peças trocáveis.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sqlite": "./src/dialects/sqlite.ts",
+    "./drivers/http": "./src/drivers/http.ts",
+    "./drivers/libsql": "./src/drivers/libsql.ts",
+    "./drivers/bun-sqlite": "./src/drivers/bun-sqlite.ts",
+    "./drivers/d1": "./src/drivers/d1.ts",
+    "./layouts/sql-folder": "./src/layouts/sql-folder.ts",
+    "./layouts/drizzle-kit": "./src/layouts/drizzle-kit.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p .",
+    "docs": "bun scripts/docs.ts",
+    "leak-check": "bun scripts/leak-check.ts",
+    "release": "bun scripts/release.ts"
+  },
+  "peerDependencies": {
+    "@libsql/client": ">=0.15.0"
+  },
+  "peerDependenciesMeta": {
+    "@libsql/client": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@libsql/client": "0.15.15",
+    "@types/bun": "1.4.2",
+    "typescript": "5.9.2"
+  }
+}

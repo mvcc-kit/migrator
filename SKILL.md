@@ -1,0 +1,264 @@
+---
+name: migrator
+description: Aplica migrations SQL versionadas (SQLite, libSQL/Turso, Cloudflare D1) com checksum, hash encadeado, trava, identidade do ambiente, detecção de drift e lint de comandos destrutivos. Use ao criar, aplicar, conferir ou adotar migrations de banco num projeto que importa `migrator`, ao escrever um script de banco (`db.ts migrate`), ao ligar um banco novo (Turso pelo HTTP, D1, bun:sqlite) ou ao escrever um driver, layout ou dialeto novo.
+---
+
+# migrator
+
+Aplica migrations SQL que já foram escritas e revisadas. Não gera SQL e não desfaz migration: corrigir é escrever a próxima (forward-only).
+
+Três peças trocáveis, e o núcleo não conhece nenhuma delas:
+
+| Peça | O que faz | Prontas |
+|---|---|---|
+| **Layout** | Onde as migrations estão e em que ordem | `sqlFolder` (pasta de `.sql` numerados), `drizzleKitJournal` (drizzle-kit 0.31), `inlineLayout` (lista no código) |
+| **Driver** | Roda SQL numa conexão | `http` (Turso Cloud e `sqld`, só `fetch`), `libsql` (`@libsql/client`), `bunSqlite`, `d1` |
+| **Dialeto** | Todo SQL próprio do motor | `sqlite` (SQLite, libSQL, Turso, D1) |
+
+## Instalar
+
+Pelo GitHub, fixado numa tag (nunca num branch):
+
+```json
+{ "dependencies": { "migrator": "github:mvcc-kit/migrator#v0.1.0-beta" } }
+```
+
+O núcleo (`migrator`) roda em Bun, Node e Cloudflare Workers: só usa Web Crypto. `migrator/layouts/*` usa `node:fs`; `migrator/drivers/bun-sqlite` só roda no Bun; `migrator/drivers/libsql` precisa de `@libsql/client` instalado no projeto.
+
+## Começo rápido
+
+```ts
+import { Database } from 'bun:sqlite'
+import { createMigrator, inlineLayout } from 'migrator'
+import { bunSqlite } from 'migrator/drivers/bun-sqlite'
+
+const migrator = createMigrator({
+  driver: bunSqlite(new Database(':memory:')),
+  layout: inlineLayout([
+    { name: '0001_users', sql: 'CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL, email TEXT NOT NULL)' },
+    { name: '0002_users_email', sql: 'CREATE UNIQUE INDEX users_email ON users (email);' },
+  ]),
+  identity: 'local',
+})
+
+await migrator.init() // cria as tabelas técnicas; idempotente
+const { applied } = await migrator.migrate()
+console.assert(applied.length === 2)
+const report = await migrator.status()
+console.assert(report.pending.length === 0 && report.problems.length === 0)
+```
+
+## Comandos
+
+| Método | O que faz |
+|---|---|
+| `init({ adoptExisting? })` | Cria `<table>`, `<table>_lock` e `<table>_meta` e grava a identidade. Recusa banco com tabelas e sem histórico, a menos que `adoptExisting`. |
+| `status()` | Aplicadas, pendentes, problemas (bloqueiam), avisos, destrutivos pendentes e trava. Não escreve nada. |
+| `migrate({ allowDestructive?, promotion?, owner? })` | Toma a trava, relê o histórico e aplica as pendentes, uma transação cada. Para no primeiro problema. |
+| `adopt(nome)` | Registra como aplicadas, sem rodar, as migrations até `nome`, se o schema real for idêntico ao delas. |
+| `unlock(dono)` | Libera uma trava abandonada, só com o dono exato. |
+
+## O que bloqueia
+
+- Migration aplicada que foi editada (checksum), removida, posta fora de ordem, ou linha do histórico alterada à mão (hash encadeado). BOM e CRLF não contam como edição.
+- Schema real diferente do que o histórico produz (drift): uma coluna ou índice criado à mão aparece aqui.
+- `PRAGMA`, `VACUUM`, `ATTACH`, `BEGIN`/`COMMIT`, dois comandos num item ou item vazio.
+- Comando destrutivo sem `-- migration:destructive <motivo>` no arquivo **e** `allowDestructive`. Destrutivo: `DROP TABLE`, `DROP VIEW`, `ALTER TABLE ... DROP`, `ALTER TABLE ... RENAME`, `DELETE`/`UPDATE` sem `WHERE` (com ou sem `WITH` antes). O lint lê o SQL sem comentários e sem strings: um comentário antes do `DROP` não esconde nada.
+- Banco de outro ambiente (`identity`), ou migration que ainda não rodou no ambiente de origem (`promotion`).
+- Trava de outra execução.
+
+Arquivo fora do padrão de nome (ou `.sql` fora do journal do drizzle) gera **aviso** e fica de fora.
+
+## Escrever migrations
+
+- Nome: `<número>_<nome>`, como `0003_add_orders.sql`. A ordem é a do número; número repetido bloqueia.
+- Separação dos comandos: `;` de nível superior (strings, comentários e o corpo de `CREATE TRIGGER ... BEGIN ... END` são respeitados). Arquivo com `--> statement-breakpoint` é separado só por essa fronteira, como o drizzle-kit gera.
+- Não escreva `PRAGMA foreign_keys`: o migrator já desliga as chaves estrangeiras em volta de cada migration e confere todas (`pragma_foreign_key_check`) antes do commit. Reconstruir uma tabela pai não apaga os filhos `ON DELETE CASCADE`.
+- Cada migration é uma transação com o registro dela no histórico: ou entra inteira, ou nada entra.
+- Aplicada não se edita. Para corrigir, escreva a próxima.
+- Remover ou renomear coluna leva duas versões: a primeira para de usar, a segunda (destrutiva, com motivo) remove.
+- Dados grandes (backfill) são trabalho da aplicação, em lotes. Migration é para mudança rápida de schema.
+
+```sql
+-- migration:destructive a coluna legacy_code não é lida desde a 0007
+ALTER TABLE orders DROP COLUMN legacy_code;
+```
+
+## Turso Cloud ou sqld pelo HTTP
+
+O driver `http` fala o protocolo do libSQL (Hrana v2) só com `fetch`, sem `@libsql/client`. O banco descartável que confere o schema vem de fora: nas ferramentas em Bun, `memoryScratch`.
+
+```ts
+// exemplo: só tipos
+import { createMigrator } from 'migrator'
+import { http } from 'migrator/drivers/http'
+import { memoryScratch } from 'migrator/drivers/bun-sqlite'
+import { sqlFolder } from 'migrator/layouts/sql-folder'
+
+const migrator = createMigrator({
+  driver: http({ url: process.env.DATABASE_URL!, authToken: process.env.DATABASE_TOKEN, scratch: memoryScratch }),
+  layout: sqlFolder({ dir: 'migrations' }),
+  identity: 'production',
+  commit: process.env.GIT_COMMIT ?? 'unknown',
+  actor: 'deploy',
+})
+const report = await migrator.status()
+if (report.problems.length) throw new Error(report.problems.join('\n'))
+await migrator.migrate()
+```
+
+`url` aceita `libsql://…` (como o painel do Turso mostra), `https://…`, e `http://` só em loopback (`sqld` local). Fora do loopback, `authToken` é obrigatório, e ele nunca aparece numa mensagem de erro.
+
+## Ambientes
+
+- `identity` marca o banco no `init()`. Depois, todo comando recusa banco com outra marca: apontar o script de produção para o preview falha antes de escrever.
+- `promotion` faz produção aplicar só o que já rodou em outro ambiente:
+
+```ts
+// exemplo: só tipos
+import { createMigrator, type Migrator } from 'migrator'
+
+declare const preview: Migrator
+declare const production: Migrator
+const { applied } = await preview.status()
+await production.migrate({ promotion: { from: 'preview', applied } })
+```
+
+## Banco que já existe
+
+Banco criado sem o migrator (por outro executor, import, ou à mão) entra sem rodar nada de novo, e só se o schema for exatamente o das migrations:
+
+```ts
+// exemplo: só tipos
+import type { Migrator } from 'migrator'
+
+declare const migrator: Migrator
+await migrator.init({ adoptExisting: true })
+await migrator.adopt('0004_last_applied_by_the_old_tool')
+```
+
+Tabelas que não são da aplicação (o histórico de um executor antigo, por exemplo) ficam fora da comparação com `ignoreTables: ['old_migrations', 'tmp_*']`.
+
+## Cloudflare D1 e Workers
+
+`migrator` e `migrator/drivers/d1` não importam nada do Node nem do Bun. O D1 não desliga chaves estrangeiras (as ações `ON DELETE` disparariam), então o driver recusa migration em banco com FK.
+
+```ts
+// exemplo: só tipos
+import { createMigrator, inlineLayout } from 'migrator'
+import { d1, type D1Like } from 'migrator/drivers/d1'
+import { memoryScratch } from 'migrator/drivers/bun-sqlite'
+
+declare const DB: D1Like // binding do Worker ou do getPlatformProxy do wrangler
+const migrator = createMigrator({
+  driver: d1(DB, { scratch: memoryScratch }),
+  layout: inlineLayout([{ name: '0001_events', sql: 'CREATE TABLE events (id TEXT PRIMARY KEY NOT NULL)' }]),
+})
+await migrator.migrate()
+```
+
+## Script de banco num projeto
+
+Um arquivo (`scripts/db.ts`) com `init`, `status`, `migrate`, `adopt` e `unlock`, e o ambiente sempre explícito: produção nunca é o padrão.
+
+```ts
+// exemplo: só tipos
+import { parseArgs } from 'node:util'
+import { createMigrator } from 'migrator'
+import { http } from 'migrator/drivers/http'
+import { memoryScratch } from 'migrator/drivers/bun-sqlite'
+import { sqlFolder } from 'migrator/layouts/sql-folder'
+
+const { values, positionals } = parseArgs({ args: Bun.argv.slice(2), options: { env: { type: 'string' } }, allowPositionals: true })
+if (values.env !== 'local' && values.env !== 'production') throw new Error('use --env local ou --env production')
+const migrator = createMigrator({
+  driver: http({ url: process.env.DATABASE_URL!, authToken: process.env.DATABASE_TOKEN, scratch: memoryScratch }),
+  layout: sqlFolder({ dir: new URL('../migrations', import.meta.url).pathname }),
+  identity: values.env,
+})
+const [command, arg] = positionals
+if (command === 'init') await migrator.init()
+else if (command === 'status') console.log(await migrator.status())
+else if (command === 'migrate') console.log(await migrator.migrate({ allowDestructive: Bun.argv.includes('--allow-destructive') }))
+else if (command === 'adopt' && arg) console.log(await migrator.adopt(arg))
+else if (command === 'unlock' && arg) await migrator.unlock(arg)
+else throw new Error('comandos: init, status, migrate, adopt <nome>, unlock <dono>')
+```
+
+## Testar as migrations do projeto
+
+Rode a pasta real num SQLite em memória e confira dados falsos atravessando a migration:
+
+```ts
+import { Database } from 'bun:sqlite'
+import { createMigrator, inlineLayout } from 'migrator'
+import { bunSqlite } from 'migrator/drivers/bun-sqlite'
+
+const database = new Database(':memory:')
+const layout = (count: number) =>
+  inlineLayout(
+    [
+      { name: '0001_people', sql: 'CREATE TABLE people (id TEXT PRIMARY KEY NOT NULL, name TEXT)' },
+      {
+        name: '0002_name_required',
+        sql: `-- migration:destructive reconstrói people para name NOT NULL
+CREATE TABLE people_new (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL DEFAULT '');
+INSERT INTO people_new (id, name) SELECT id, coalesce(name, '') FROM people;
+DROP TABLE people;
+ALTER TABLE people_new RENAME TO people;`,
+      },
+    ].slice(0, count),
+  )
+const first = createMigrator({ driver: bunSqlite(database), layout: layout(1) })
+await first.init()
+await first.migrate()
+for (let i = 0; i < 100; i++) database.run('INSERT INTO people VALUES (?, ?)', [`p${i}`, i % 3 ? `pessoa ${i}` : null])
+await createMigrator({ driver: bunSqlite(database), layout: layout(2) }).migrate({ allowDestructive: true })
+const { n } = database.query('SELECT count(*) AS n FROM people').get() as { n: number }
+console.assert(n === 100)
+```
+
+## Erros comuns
+
+| Mensagem | O que fazer |
+|---|---|
+| `banco não inicializado ... rode init` | Rode `init()` uma vez por banco. |
+| `o banco já tem tabelas ... não vou adotá-lo sem pedido` | Banco antigo: `init({ adoptExisting: true })` e `adopt(<última aplicada>)`. |
+| `banco de outro ambiente` | A `identity` não bate: confira a URL do banco antes de qualquer outra coisa. |
+| `foi editada (checksum diferente)` | Desfaça a edição e escreva uma migration nova. |
+| `schema diferente do histórico` | Alguém mudou o banco à mão. Desfaça a mudança ou escreva a migration que a formaliza (e aplique-a com `adopt` num banco que já a tem). |
+| `é destrutiva` | Confirme que é intencional, ponha `-- migration:destructive <motivo>` no arquivo e rode com `allowDestructive`. |
+| `trava ocupada por X` | Outra execução está rodando. Só depois de confirmar que ela parou: `unlock('X')`. |
+| `a trava não foi devolvida; rode unlock("X")` | A conexão caiu no fim. O trabalho está no histórico; libere com o dono mostrado. |
+| `passe scratch na configuração` | O driver não cria banco descartável: passe `scratch: memoryScratch` (Bun). |
+
+## Peça nova
+
+Um banco novo, outro SDK ou outro formato de pasta é um arquivo novo, sem mexer no núcleo:
+
+- **Driver** (`Driver`): `query`, `run`, `transaction(statements, { foreignKeys })` atômica, `scratch?` e o `dialect`.
+- **Layout** (`Layout`): `load()` devolve `{ migrations, problems, warnings }` na ordem de aplicação. Use `statementsOf` e `checkOrder` de `migrator`.
+- **Dialeto** (`Dialect`): tabelas técnicas, `abortUnless` (guarda dentro da transação), `foreignKeysValid`, `lint` e `describeSchema`.
+
+```ts
+import { createMigrator, inlineLayout, type Driver } from 'migrator'
+import { Database } from 'bun:sqlite'
+import { bunSqlite } from 'migrator/drivers/bun-sqlite'
+
+// Um driver que conta os comandos, por cima de outro: o núcleo só vê a interface.
+const inner = bunSqlite(new Database(':memory:'))
+let statements = 0
+const counting: Driver = {
+  ...inner,
+  async transaction(list, options) {
+    statements += list.length
+    return inner.transaction(list, options)
+  },
+}
+const migrator = createMigrator({ driver: counting, layout: inlineLayout([{ name: '0001_a', sql: 'CREATE TABLE a (id TEXT)' }]) })
+await migrator.init()
+await migrator.migrate()
+console.assert(statements > 0)
+```
+
+Decisões e o que ficou de fora: `ADR.md`. O que falta: `TAREFAS.md`.
