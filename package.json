@@ -1,6 +1,6 @@
 {
   "name": "@mvcc-kit/migrator",
-  "version": "0.1.0-beta",
+  "version": "0.1.1-beta",
   "private": true,
   "type": "module",
   "description": "Aplica migrations SQL versionadas com checksum, hash encadeado, trava, identidade do ambiente, detecção de drift e lint de comandos destrutivos. Layout, dialeto e driver são peças trocáveis.",
