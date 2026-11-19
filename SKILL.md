@@ -20,17 +20,17 @@ Três peças trocáveis, e o núcleo não conhece nenhuma delas:
 Pelo GitHub, fixado numa tag (nunca num branch):
 
 ```json
-{ "dependencies": { "migrator": "github:mvcc-kit/migrator#v0.1.0-beta" } }
+{ "dependencies": { "@mvcc-kit/migrator": "github:mvcc-kit/migrator#v0.1.1-beta" } }
 ```
 
-O núcleo (`migrator`) roda em Bun, Node e Cloudflare Workers: só usa Web Crypto. `migrator/layouts/*` usa `node:fs`; `migrator/drivers/bun-sqlite` só roda no Bun; `migrator/drivers/libsql` precisa de `@libsql/client` instalado no projeto.
+O núcleo (`@mvcc-kit/migrator`) roda em Bun, Node e Cloudflare Workers: só usa Web Crypto. `@mvcc-kit/migrator/layouts/*` usa `node:fs`; `@mvcc-kit/migrator/drivers/bun-sqlite` só roda no Bun; `@mvcc-kit/migrator/drivers/libsql` precisa de `@libsql/client` instalado no projeto.
 
 ## Começo rápido
 
 ```ts
 import { Database } from 'bun:sqlite'
-import { createMigrator, inlineLayout } from 'migrator'
-import { bunSqlite } from 'migrator/drivers/bun-sqlite'
+import { createMigrator, inlineLayout } from '@mvcc-kit/migrator'
+import { bunSqlite } from '@mvcc-kit/migrator/drivers/bun-sqlite'
 
 const migrator = createMigrator({
   driver: bunSqlite(new Database(':memory:')),
@@ -90,10 +90,10 @@ O driver `http` fala o protocolo do libSQL (Hrana v2) só com `fetch`, sem `@lib
 
 ```ts
 // exemplo: só tipos
-import { createMigrator } from 'migrator'
-import { http } from 'migrator/drivers/http'
-import { memoryScratch } from 'migrator/drivers/bun-sqlite'
-import { sqlFolder } from 'migrator/layouts/sql-folder'
+import { createMigrator } from '@mvcc-kit/migrator'
+import { http } from '@mvcc-kit/migrator/drivers/http'
+import { memoryScratch } from '@mvcc-kit/migrator/drivers/bun-sqlite'
+import { sqlFolder } from '@mvcc-kit/migrator/layouts/sql-folder'
 
 const migrator = createMigrator({
   driver: http({ url: process.env.DATABASE_URL!, authToken: process.env.DATABASE_TOKEN, scratch: memoryScratch }),
@@ -116,7 +116,7 @@ await migrator.migrate()
 
 ```ts
 // exemplo: só tipos
-import { createMigrator, type Migrator } from 'migrator'
+import { createMigrator, type Migrator } from '@mvcc-kit/migrator'
 
 declare const preview: Migrator
 declare const production: Migrator
@@ -130,7 +130,7 @@ Banco criado sem o migrator (por outro executor, import, ou à mão) entra sem r
 
 ```ts
 // exemplo: só tipos
-import type { Migrator } from 'migrator'
+import type { Migrator } from '@mvcc-kit/migrator'
 
 declare const migrator: Migrator
 await migrator.init({ adoptExisting: true })
@@ -141,13 +141,13 @@ Tabelas que não são da aplicação (o histórico de um executor antigo, por ex
 
 ## Cloudflare D1 e Workers
 
-`migrator` e `migrator/drivers/d1` não importam nada do Node nem do Bun. O D1 não desliga chaves estrangeiras (as ações `ON DELETE` disparariam), então o driver recusa migration em banco com FK.
+`@mvcc-kit/migrator` e `@mvcc-kit/migrator/drivers/d1` não importam nada do Node nem do Bun. O D1 não desliga chaves estrangeiras (as ações `ON DELETE` disparariam), então o driver recusa migration em banco com FK.
 
 ```ts
 // exemplo: só tipos
-import { createMigrator, inlineLayout } from 'migrator'
-import { d1, type D1Like } from 'migrator/drivers/d1'
-import { memoryScratch } from 'migrator/drivers/bun-sqlite'
+import { createMigrator, inlineLayout } from '@mvcc-kit/migrator'
+import { d1, type D1Like } from '@mvcc-kit/migrator/drivers/d1'
+import { memoryScratch } from '@mvcc-kit/migrator/drivers/bun-sqlite'
 
 declare const DB: D1Like // binding do Worker ou do getPlatformProxy do wrangler
 const migrator = createMigrator({
@@ -164,10 +164,10 @@ Um arquivo (`scripts/db.ts`) com `init`, `status`, `migrate`, `adopt` e `unlock`
 ```ts
 // exemplo: só tipos
 import { parseArgs } from 'node:util'
-import { createMigrator } from 'migrator'
-import { http } from 'migrator/drivers/http'
-import { memoryScratch } from 'migrator/drivers/bun-sqlite'
-import { sqlFolder } from 'migrator/layouts/sql-folder'
+import { createMigrator } from '@mvcc-kit/migrator'
+import { http } from '@mvcc-kit/migrator/drivers/http'
+import { memoryScratch } from '@mvcc-kit/migrator/drivers/bun-sqlite'
+import { sqlFolder } from '@mvcc-kit/migrator/layouts/sql-folder'
 
 const { values, positionals } = parseArgs({ args: Bun.argv.slice(2), options: { env: { type: 'string' } }, allowPositionals: true })
 if (values.env !== 'local' && values.env !== 'production') throw new Error('use --env local ou --env production')
@@ -191,8 +191,8 @@ Rode a pasta real num SQLite em memória e confira dados falsos atravessando a m
 
 ```ts
 import { Database } from 'bun:sqlite'
-import { createMigrator, inlineLayout } from 'migrator'
-import { bunSqlite } from 'migrator/drivers/bun-sqlite'
+import { createMigrator, inlineLayout } from '@mvcc-kit/migrator'
+import { bunSqlite } from '@mvcc-kit/migrator/drivers/bun-sqlite'
 
 const database = new Database(':memory:')
 const layout = (count: number) =>
@@ -241,9 +241,9 @@ Um banco novo, outro SDK ou outro formato de pasta é um arquivo novo, sem mexer
 - **Dialeto** (`Dialect`): tabelas técnicas, `abortUnless` (guarda dentro da transação), `foreignKeysValid`, `lint` e `describeSchema`.
 
 ```ts
-import { createMigrator, inlineLayout, type Driver } from 'migrator'
+import { createMigrator, inlineLayout, type Driver } from '@mvcc-kit/migrator'
 import { Database } from 'bun:sqlite'
-import { bunSqlite } from 'migrator/drivers/bun-sqlite'
+import { bunSqlite } from '@mvcc-kit/migrator/drivers/bun-sqlite'
 
 // Um driver que conta os comandos, por cima de outro: o núcleo só vê a interface.
 const inner = bunSqlite(new Database(':memory:'))

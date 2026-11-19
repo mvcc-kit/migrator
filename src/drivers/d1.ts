@@ -20,7 +20,7 @@ export interface D1Like {
 export interface D1DriverOptions {
   /**
    * Banco descartável para reaplicar o histórico. O D1 não cria bancos na hora:
-   * nas ferramentas, use `memoryScratch` de `migrator/drivers/bun-sqlite` (o D1
+   * nas ferramentas, use `memoryScratch` de `@mvcc-kit/migrator/drivers/bun-sqlite` (o D1
    * roda SQLite). Sem ele, passe `scratch` na configuração do migrator.
    */
   scratch?: () => Promise<ScratchDriver>

@@ -4,8 +4,8 @@ Aplica migrations SQL versionadas com segurança: checksum, hash encadeado, trav
 
 ```ts
 import { Database } from 'bun:sqlite'
-import { createMigrator, inlineLayout } from 'migrator'
-import { bunSqlite } from 'migrator/drivers/bun-sqlite'
+import { createMigrator, inlineLayout } from '@mvcc-kit/migrator'
+import { bunSqlite } from '@mvcc-kit/migrator/drivers/bun-sqlite'
 
 const migrator = createMigrator({
   driver: bunSqlite(new Database(':memory:')),
@@ -27,7 +27,7 @@ await migrator.migrate()
 ## Instalar
 
 ```json
-{ "dependencies": { "migrator": "github:mvcc-kit/migrator#v0.1.0-beta" } }
+{ "dependencies": { "@mvcc-kit/migrator": "github:mvcc-kit/migrator#v0.1.1-beta" } }
 ```
 
 ## Documentação

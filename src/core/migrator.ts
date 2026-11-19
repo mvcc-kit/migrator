@@ -160,7 +160,7 @@ export function createMigrator(config: MigratorConfig): Migrator {
   async function openScratch(): Promise<ScratchDriver> {
     if (!makeScratch)
       throw new MigrationError(
-        'este driver não tem banco descartável para conferir o schema; passe scratch na configuração (ex.: memoryScratch de migrator/drivers/bun-sqlite)',
+        'este driver não tem banco descartável para conferir o schema; passe scratch na configuração (ex.: memoryScratch de @mvcc-kit/migrator/drivers/bun-sqlite)',
       )
     return makeScratch()
   }

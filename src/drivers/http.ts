@@ -11,7 +11,7 @@ export interface HttpDriverOptions {
   /** Limite de cada pedido. Padrão: 30 s (uma migration pode ser lenta). */
   timeoutMs?: number
   fetch?: typeof fetch
-  /** Banco descartável. Nas ferramentas: `memoryScratch` de `migrator/drivers/bun-sqlite`. */
+  /** Banco descartável. Nas ferramentas: `memoryScratch` de `@mvcc-kit/migrator/drivers/bun-sqlite`. */
   scratch?: () => Promise<ScratchDriver>
 }
 

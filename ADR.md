@@ -130,7 +130,7 @@ O pacote não apaga banco nem desfaz migration. Corrigir é criar outra (forward
 
 ## M14: Dependências mínimas
 
-Zero dependência em tempo de execução. Cada driver importa o próprio SDK como dependência opcional, por um caminho separado (`migrator/drivers/libsql`): quem usa um não carrega o outro.
+Zero dependência em tempo de execução. Cada driver importa o próprio SDK como dependência opcional, por um caminho separado (`@mvcc-kit/migrator/drivers/libsql`): quem usa um não carrega o outro.
 
 ---
 

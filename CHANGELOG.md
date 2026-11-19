@@ -2,6 +2,16 @@
 
 As versões seguem [RELEASING.md](RELEASING.md). Mudança de quebra é permitida no beta e sempre aparece em "Mudanças de quebra".
 
+## 0.1.1-beta (19/11/2026)
+
+### Segurança
+
+- `bunfig.toml` com `install.auto = "disable"`: o Bun nunca instala pacote sozinho neste repositório.
+
+### Mudanças de quebra
+
+- O pacote agora se chama `@mvcc-kit/migrator` (o nome `migrator` existe no npm e é de outra pessoa; fora do projeto, o Bun o baixaria e rodaria). Troque a dependência para `"@mvcc-kit/migrator": "github:mvcc-kit/migrator#v0.1.1-beta"` e os imports de `'migrator'` e `'migrator/...'` para `'@mvcc-kit/migrator'` e `'@mvcc-kit/migrator/...'`.
+
 ## 0.1.0-beta (19/11/2026)
 
 ### Adicionado

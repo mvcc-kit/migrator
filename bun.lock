@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "migrator",
+      "name": "@mvcc-kit/migrator",
       "devDependencies": {
         "@libsql/client": "0.15.15",
         "@types/bun": "1.4.2",
